@@ -1,13 +1,23 @@
-// Piano Knowledge Adapter: Unifies all 6 knowledge bases into rhythm piano learning items
+// Piano Knowledge Adapter: Unifies all knowledge bases + 1000 Q&A Sequences into rhythm piano learning items
 
 import { getChapter, CHAPTER_CATALOG } from '../data/chapters';
 import { getWritingChapter } from '../data/writing/writingData';
 import { getSpeakingChapter } from '../data/speaking/speakingData';
 import { getListeningChapter } from '../data/listening/listeningData';
 import { COMMON_MISTAKES_DATA } from '../data/mistakes/commonMistakes';
+import { getQA1000Item, QA1000Item } from '../data/qa1000/qa1000Data';
 import { VocabWord } from '../types';
 
-export type KnowledgeCategoryType = 'chapter' | 'writing' | 'speaking' | 'listening' | 'mistakes' | 'vocab-vault';
+export type KnowledgeCategoryType = 
+  | 'chapter' 
+  | 'qa-speaking' 
+  | 'qa-writing' 
+  | 'qa-master'
+  | 'writing' 
+  | 'speaking' 
+  | 'listening' 
+  | 'mistakes' 
+  | 'vocab-vault';
 
 export interface PianoKnowledgeItem {
   id: string;
@@ -16,8 +26,15 @@ export interface PianoKnowledgeItem {
   topicTitle: string;
   topicSubtitle: string;
   chapterOrTopicId: number | string;
-  itemType: 'vocab' | 'sentence' | 'mistake' | 'idiom' | 'collocation' | 'structure';
+  itemType: 'vocab' | 'sentence' | 'mistake' | 'idiom' | 'collocation' | 'structure' | 'qa-question' | 'qa-sentence';
   
+  // Q&A Specific Step Metadata (e.g., '❓ CÂU HỎI', '💬 CÂU 1/5: MỞ ĐẦU')
+  qaStepBadge?: string;
+  qaStepRole?: string;
+  qaQuestionId?: number;
+  qaTotalSentences?: number;
+  qaCurrentStep?: number;
+
   // Primary Display Content (Bilingual)
   englishText: string;
   phonetic?: string;
@@ -45,12 +62,95 @@ export interface TopicCatalogItem {
   itemCount: number;
 }
 
+// Convert QA1000Item into a 6-note sequence (1 Question + 5 Sentence answers)
+function convertQAItemToNotes(qa: QA1000Item): PianoKnowledgeItem[] {
+  const notes: PianoKnowledgeItem[] = [];
+
+  // Note 1: The Question / Task Prompt
+  notes.push({
+    id: `qa-${qa.id}-q`,
+    category: qa.type === 'speaking' ? 'qa-speaking' : 'qa-writing',
+    categoryLabel: `${qa.subType} #${qa.id}`,
+    topicTitle: qa.topic,
+    topicSubtitle: `Bộ 1000 Q&A: ${qa.subType} (${qa.category})`,
+    chapterOrTopicId: qa.id,
+    itemType: 'qa-question',
+    qaStepBadge: '❓ CÂU HỎI / ĐỀ BÀI',
+    qaStepRole: 'Question Prompt',
+    qaQuestionId: qa.id,
+    qaTotalSentences: 5,
+    qaCurrentStep: 0,
+    englishText: qa.question,
+    vietnameseText: qa.questionVi,
+    band: qa.bandTarget,
+    explanation: `Đề bài ${qa.subType} trọng điểm. Gõ nốt tiếp theo để tấu từng câu trả lời mẫu chuẩn Band 8.5+!`
+  });
+
+  // Notes 2 to 6: The 5-Sentence Sample Breakdown
+  qa.sentences.forEach((st) => {
+    notes.push({
+      id: `qa-${qa.id}-s-${st.stepIndex}`,
+      category: qa.type === 'speaking' ? 'qa-speaking' : 'qa-writing',
+      categoryLabel: `${qa.subType} #${qa.id}`,
+      topicTitle: qa.topic,
+      topicSubtitle: `Câu trả lời cho: ${qa.question.slice(0, 60)}...`,
+      chapterOrTopicId: qa.id,
+      itemType: 'qa-sentence',
+      qaStepBadge: `💬 CÂU ${st.stepIndex}/5`,
+      qaStepRole: st.role,
+      qaQuestionId: qa.id,
+      qaTotalSentences: 5,
+      qaCurrentStep: st.stepIndex,
+      englishText: st.en,
+      vietnameseText: st.vi,
+      band: qa.bandTarget,
+      collocations: st.keyCollocations,
+      exampleSentence: qa.question,
+      explanation: `${st.role} - Chiến lược ghi điểm Band 8.5+ chuẩn cấu trúc học thuật.`
+    });
+  });
+
+  return notes;
+}
+
 // 1. Get Topic Items for a specific Category & Topic ID
 export function getPianoKnowledgeItems(category: KnowledgeCategoryType, topicId: number | string): PianoKnowledgeItem[] {
   const items: PianoKnowledgeItem[] = [];
   const numId = typeof topicId === 'number' ? topicId : parseInt(topicId, 10) || 1;
 
-  if (category === 'chapter') {
+  if (category === 'qa-speaking') {
+    // Each pack contains 20 Speaking Q&As (20 * 6 = 120 notes)
+    const pack = Math.max(1, Math.min(25, numId));
+    const startQ = (pack - 1) * 20 + 1;
+    const endQ = Math.min(500, startQ + 19);
+
+    for (let q = startQ; q <= endQ; q++) {
+      const qa = getQA1000Item(q);
+      items.push(...convertQAItemToNotes(qa));
+    }
+
+  } else if (category === 'qa-writing') {
+    // Each pack contains 20 Writing Q&As (20 * 6 = 120 notes)
+    const pack = Math.max(1, Math.min(25, numId));
+    const startQ = 500 + (pack - 1) * 20 + 1;
+    const endQ = Math.min(1000, startQ + 19);
+
+    for (let q = startQ; q <= endQ; q++) {
+      const qa = getQA1000Item(q);
+      items.push(...convertQAItemToNotes(qa));
+    }
+
+  } else if (category === 'qa-master') {
+    // Master Endless Mode: Load batches of 50 Q&As starting from numId
+    const startQ = Math.max(1, ((numId - 1) * 30) + 1);
+    const endQ = Math.min(1000, startQ + 29);
+
+    for (let q = startQ; q <= endQ; q++) {
+      const qa = getQA1000Item(q);
+      items.push(...convertQAItemToNotes(qa));
+    }
+
+  } else if (category === 'chapter') {
     const chapter = getChapter(numId);
     
     // Add vocabulary vault items
@@ -285,7 +385,6 @@ export function getPianoKnowledgeItems(category: KnowledgeCategoryType, topicId:
     });
 
   } else if (category === 'vocab-vault') {
-    // Collect from current and surrounding chapters
     const startCh = Math.max(1, ((numId - 1) * 5) + 1);
     const endCh = Math.min(100, startCh + 4);
     for (let c = startCh; c <= endCh; c++) {
@@ -312,46 +411,50 @@ export function getPianoKnowledgeItems(category: KnowledgeCategoryType, topicId:
     }
   }
 
-  // If empty fallback
+  // Fallback if empty
   if (items.length === 0) {
-    const defaultCh = getChapter(1);
-    defaultCh.vocabularyVault.forEach((v, idx) => {
-      items.push({
-        id: `fallback-${idx}`,
-        category: 'chapter',
-        categoryLabel: 'Chương 1: Trí Tuệ Nhân Tạo',
-        topicTitle: defaultCh.title,
-        topicSubtitle: defaultCh.titleEn,
-        chapterOrTopicId: 1,
-        itemType: 'vocab',
-        englishText: v.word,
-        phonetic: v.phonetic,
-        pos: v.pos,
-        band: v.band,
-        vietnameseText: v.meaningVi,
-        collocations: v.collocations,
-        exampleSentence: v.ieltsExample
-      });
-    });
+    const defaultQA = getQA1000Item(1);
+    items.push(...convertQAItemToNotes(defaultQA));
   }
 
   return items;
 }
 
-// 2. Helper to get next topic in sequence for Endless Play!
+// 2. Helper to get next topic in sequence for Endless Play (Continuous 10-Hour Non-Stop)!
 export function getNextTopic(
   currentCategory: KnowledgeCategoryType, 
   currentTopicId: number | string
 ): { nextCategory: KnowledgeCategoryType; nextTopicId: number | string; nextTitle: string } {
   const numId = typeof currentTopicId === 'number' ? currentTopicId : parseInt(currentTopicId, 10) || 1;
 
-  if (currentCategory === 'chapter') {
+  if (currentCategory === 'qa-speaking') {
+    if (numId < 25) {
+      const nextId = numId + 1;
+      return { nextCategory: 'qa-speaking', nextTopicId: nextId, nextTitle: `Speaking Q&A Gói ${nextId}/25 (500 Câu)` };
+    } else {
+      return { nextCategory: 'qa-writing', nextTopicId: 1, nextTitle: 'Writing Q&A Gói 1/25 (Task 1 & 2 Sample 5 Câu)' };
+    }
+  } else if (currentCategory === 'qa-writing') {
+    if (numId < 25) {
+      const nextId = numId + 1;
+      return { nextCategory: 'qa-writing', nextTopicId: nextId, nextTitle: `Writing Q&A Gói ${nextId}/25 (500 Câu)` };
+    } else {
+      return { nextCategory: 'qa-master', nextTopicId: 1, nextTitle: 'Master 1000 Q&A Chuỗi Đàn Bất Tận' };
+    }
+  } else if (currentCategory === 'qa-master') {
+    if (numId < 34) {
+      const nextId = numId + 1;
+      return { nextCategory: 'qa-master', nextTopicId: nextId, nextTitle: `Master 1000 Q&A Giai Đoạn ${nextId}/34` };
+    } else {
+      return { nextCategory: 'chapter', nextTopicId: 1, nextTitle: 'Chương 1: Trí Tuệ Nhân Tạo & Kỷ Nguyên Số' };
+    }
+  } else if (currentCategory === 'chapter') {
     if (numId < 100) {
       const nextId = numId + 1;
       const ch = getChapter(nextId);
       return { nextCategory: 'chapter', nextTopicId: nextId, nextTitle: `Chương ${nextId}: ${ch.title}` };
     } else {
-      return { nextCategory: 'writing', nextTopicId: 1, nextTitle: 'Writing Lab 1: Task 1 Line Graph' };
+      return { nextCategory: 'qa-speaking', nextTopicId: 1, nextTitle: 'Speaking Q&A Gói 1/25 (500 Câu Hỏi & Trả Lời Mẫu)' };
     }
   } else if (currentCategory === 'writing') {
     if (numId < 100) {
@@ -378,15 +481,64 @@ export function getNextTopic(
       return { nextCategory: 'mistakes', nextTopicId: 1, nextTitle: 'Bẫy Lỗi Kinh Điển Band 5.0 - 8.0' };
     }
   } else if (currentCategory === 'mistakes') {
-    return { nextCategory: 'vocab-vault', nextTopicId: 1, nextTitle: 'Kho Từ Vựng Band 8.0+ Mastery' };
+    return { nextCategory: 'qa-speaking', nextTopicId: 1, nextTitle: '500 Speaking Q&A Chuỗi 5 Câu Mẫu' };
   } else {
-    // Loop back to Chapter 1
-    return { nextCategory: 'chapter', nextTopicId: 1, nextTitle: 'Chương 1: Trí Tuệ Nhân Tạo & Kỷ Nguyên Số' };
+    return { nextCategory: 'qa-speaking', nextTopicId: 1, nextTitle: '500 Speaking Q&A Chuỗi 5 Câu Mẫu' };
   }
 }
 
 // 3. Get catalog list for the topic switcher dropdown/modal
 export function getTopicsCatalogForCategory(category: KnowledgeCategoryType): TopicCatalogItem[] {
+  if (category === 'qa-speaking') {
+    return Array.from({ length: 25 }, (_, i) => {
+      const packId = i + 1;
+      const startQ = (packId - 1) * 20 + 1;
+      const endQ = packId * 20;
+      const sampleItem = getQA1000Item(startQ);
+      return {
+        id: packId,
+        category: 'qa-speaking',
+        title: `Speaking Gói ${packId}: ${sampleItem.topic}`,
+        titleEn: `Questions ${startQ}-${endQ} (${sampleItem.subType})`,
+        categoryName: sampleItem.subType,
+        itemCount: 120 // 20 questions * 6 notes
+      };
+    });
+  }
+
+  if (category === 'qa-writing') {
+    return Array.from({ length: 25 }, (_, i) => {
+      const packId = i + 1;
+      const startQ = 500 + (packId - 1) * 20 + 1;
+      const endQ = 500 + packId * 20;
+      const sampleItem = getQA1000Item(startQ);
+      return {
+        id: packId,
+        category: 'qa-writing',
+        title: `Writing Gói ${packId}: ${sampleItem.topic}`,
+        titleEn: `Essays/Reports ${startQ}-${endQ} (${sampleItem.subType})`,
+        categoryName: sampleItem.subType,
+        itemCount: 120 // 20 prompts * 6 notes
+      };
+    });
+  }
+
+  if (category === 'qa-master') {
+    return Array.from({ length: 34 }, (_, i) => {
+      const batchId = i + 1;
+      const startQ = (batchId - 1) * 30 + 1;
+      const endQ = Math.min(1000, batchId * 30);
+      return {
+        id: batchId,
+        category: 'qa-master',
+        title: `Master 1000 Q&A Giai Đoạn ${batchId}`,
+        titleEn: `Continuous 1000 Q&A Batch (${startQ} - ${endQ})`,
+        categoryName: '1000 Q&A Endless',
+        itemCount: 180
+      };
+    });
+  }
+
   if (category === 'chapter') {
     return CHAPTER_CATALOG.map(c => ({
       id: c.id,
