@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TitleBar } from './components/TitleBar';
 import { Navbar } from './components/Navbar';
+import { PianoTilesGame } from './components/PianoTilesGame';
 import { NovelReader } from './components/NovelReader';
 import { WritingLab } from './components/WritingLab';
 import { SpeakingSimulator } from './components/SpeakingSimulator';
@@ -20,8 +21,8 @@ export const App: React.FC = () => {
     return saved ? parseInt(saved, 10) : 1;
   });
 
-  const [activeTab, setActiveTab] = useState<'reader' | 'writing' | 'speaking' | 'listening' | 'vocab' | 'mistakes' | 'quiz'>(() => {
-    return (localStorage.getItem('ielts_anime_tab') as any) || 'reader';
+  const [activeTab, setActiveTab] = useState<'piano' | 'reader' | 'writing' | 'speaking' | 'listening' | 'vocab' | 'mistakes' | 'quiz'>(() => {
+    return (localStorage.getItem('ielts_anime_tab') as any) || 'piano';
   });
 
   const [fontSize, setFontSize] = useState<number>(() => {
@@ -152,6 +153,18 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 flex overflow-hidden relative">
+        {activeTab === 'piano' && (
+          <PianoTilesGame
+            initialCategory="chapter"
+            initialTopicId={currentChapterId}
+            bookmarkedWords={bookmarkedWords}
+            onToggleBookmark={handleToggleBookmark}
+            learnedWords={learnedWords}
+            onToggleLearned={handleToggleLearned}
+            onOpenWordPopup={setSelectedWord}
+          />
+        )}
+
         {activeTab === 'reader' && (
           <NovelReader
             chapter={currentChapter}

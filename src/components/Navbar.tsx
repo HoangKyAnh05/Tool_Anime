@@ -21,8 +21,8 @@ interface NavbarProps {
   currentChapterId: number;
   chapterList: ChapterMeta[];
   onSelectChapter: (id: number) => void;
-  activeTab: 'reader' | 'writing' | 'speaking' | 'listening' | 'vocab' | 'mistakes' | 'quiz';
-  onTabChange: (tab: 'reader' | 'writing' | 'speaking' | 'listening' | 'vocab' | 'mistakes' | 'quiz') => void;
+  activeTab: 'piano' | 'reader' | 'writing' | 'speaking' | 'listening' | 'vocab' | 'mistakes' | 'quiz';
+  onTabChange: (tab: 'piano' | 'reader' | 'writing' | 'speaking' | 'listening' | 'vocab' | 'mistakes' | 'quiz') => void;
   fontSize: number;
   onChangeFontSize: (delta: number) => void;
   currentTheme: string;
@@ -62,14 +62,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <header 
-        className="px-4 py-2.5 flex items-center justify-between border-b gap-4 transition-colors"
+        className="px-4 py-2 flex items-center justify-between border-b gap-3 transition-colors"
         style={{
           backgroundColor: 'var(--bg-primary)',
           borderColor: 'var(--border-color)',
         }}
       >
         {/* Left: Chapter Switcher */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => onSelectChapter(Math.max(1, currentChapterId - 1))}
             disabled={currentChapterId <= 1}
@@ -81,13 +81,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setShowChapterModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-left transition group"
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-left transition group"
           >
             <div className="flex flex-col">
-              <span className="text-[11px] font-semibold text-cyan-400 flex items-center gap-1">
+              <span className="text-[10px] font-semibold text-cyan-400 flex items-center gap-1">
                 Chương {currentChapterId}/100 <span className="text-gray-500">•</span> {currentMeta.category}
               </span>
-              <span className="text-xs font-bold text-white truncate max-w-[200px] md:max-w-xs group-hover:text-cyan-300 transition">
+              <span className="text-xs font-bold text-white truncate max-w-[150px] sm:max-w-[200px] group-hover:text-cyan-300 transition">
                 {currentMeta.title}
               </span>
             </div>
@@ -104,8 +104,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Center: Main Navigation Tabs (4 Core Skills + Tools) */}
-        <div className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto max-w-[65vw] no-scrollbar">
+        {/* Center: Main Navigation Tabs (Piano Tiles Master Mode + Skills) */}
+        <div className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto max-w-[62vw] no-scrollbar">
+          {/* FEATURED: PIANO TILES RHYTHM MODE */}
+          <button
+            onClick={() => onTabChange('piano')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all shadow-md ${
+              activeTab === 'piano'
+                ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 text-white ring-2 ring-pink-400/50 shadow-pink-500/30'
+                : 'text-pink-300 hover:text-white bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/30'
+            }`}
+          >
+            <span className="animate-pulse">🎹</span>
+            <span>Đàn Piano Học Tập</span>
+            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-pink-400 text-black ml-0.5">NEW</span>
+          </button>
+
           <button
             onClick={() => onTabChange('reader')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
@@ -115,7 +129,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            <span>📖 Reading</span>
+            <span>📖 Reading (100)</span>
           </button>
 
           <button
@@ -146,11 +160,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onTabChange('listening')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
               activeTab === 'listening'
-                ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-black shadow-md'
+                ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-md'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Headphones className="w-3.5 h-3.5 text-cyan-400" />
+            <Headphones className="w-3.5 h-3.5 text-teal-400" />
             <span>🎧 Listening AI (100)</span>
           </button>
 
@@ -196,11 +210,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Global Search Button */}
           <button
             onClick={onOpenGlobalSearch}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white text-xs transition"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white text-xs transition"
             title="Tra từ điển nhanh trong 10,000 từ vựng IELTS"
           >
             <Search className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden sm:inline">Tra Từ Vựng...</span>
+            <span className="hidden sm:inline">Tra Từ...</span>
           </button>
 
           {/* Font Size Adjusters */}
@@ -208,7 +222,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={() => onChangeFontSize(-1)}
               disabled={fontSize <= 14}
-              className="px-2 py-1 text-xs font-semibold text-gray-400 hover:text-white disabled:opacity-30 transition"
+              className="px-1.5 py-0.5 text-xs font-semibold text-gray-400 hover:text-white disabled:opacity-30 transition"
               title="Giảm cỡ chữ"
             >
               A-
@@ -217,7 +231,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={() => onChangeFontSize(1)}
               disabled={fontSize >= 24}
-              className="px-2 py-1 text-xs font-semibold text-gray-400 hover:text-white disabled:opacity-30 transition"
+              className="px-1.5 py-0.5 text-xs font-semibold text-gray-400 hover:text-white disabled:opacity-30 transition"
               title="Tăng cỡ chữ"
             >
               A+
@@ -232,7 +246,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Palette className="w-4 h-4 text-cyan-400" />
             </button>
-            <div className="absolute right-0 top-full mt-1.5 hidden group-hover:flex flex-col w-36 glass-panel p-1.5 shadow-xl z-50">
+            <div className="absolute right-0 top-full mt-1.5 hidden group-hover:flex flex-col w-40 glass-panel p-1.5 shadow-xl z-50">
               <button
                 onClick={() => onSelectTheme('theme-anime-dark')}
                 className={`text-left px-2.5 py-1.5 text-xs rounded font-medium transition ${
@@ -247,7 +261,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   currentTheme === 'theme-sepia' ? 'bg-amber-500/20 text-amber-300' : 'text-gray-300 hover:bg-white/5'
                 }`}
               >
-                ✦ Giấy Sepia Cổ Điển
+                ✦ Giấy Sepia
               </button>
               <button
                 onClick={() => onSelectTheme('theme-royal')}
