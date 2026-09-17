@@ -112,7 +112,15 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
   // Play Mode: 'step' (Tile drops when key is pressed - study mode) vs 'flow' (Tiles flow continuously)
   const [playMode, setPlayMode] = useState<'flow' | 'step'>('flow');
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [fallSpeed, setFallSpeed] = useState<number>(0.9);
+  const [fallSpeed, setFallSpeed] = useState<number>(() => {
+    const saved = localStorage.getItem('piano_game_fall_speed');
+    return saved ? parseFloat(saved) : 1.0;
+  });
+
+  const handleSetSpeed = (newSpeed: number) => {
+    setFallSpeed(newSpeed);
+    localStorage.setItem('piano_game_fall_speed', newSpeed.toString());
+  };
 
   const [activeTiles, setActiveTiles] = useState<ActiveTile[]>([]);
   const [ripples, setRipples] = useState<RippleEffect[]>([]);
@@ -228,7 +236,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
       songIndex: songIndexRef.current
     };
 
-    setActiveTiles(prev => [...prev.slice(-10), newTile]);
+    setActiveTiles(prev => [...prev.slice(-25), newTile]);
     setCurrentItemIndex(prev => prev + 1);
     setSongNoteIndex(prev => prev + 1);
   }, [knowledgeItems, selectedSong]);
@@ -611,6 +619,28 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
 
         {/* Right: Controls */}
         <div className="flex items-center gap-1.5">
+          {/* Quick Speed Switcher Button with 3x and 10x */}
+          <button
+            onClick={() => {
+              const speeds = [0.5, 1.0, 1.5, 2.0, 3.0, 10.0];
+              const nextIdx = (speeds.indexOf(fallSpeed) + 1) % speeds.length;
+              handleSetSpeed(speeds[nextIdx >= 0 ? nextIdx : 1]);
+            }}
+            className={`px-2 py-1 rounded-lg text-xs font-mono font-black border flex items-center gap-1 transition ${
+              fallSpeed >= 10 
+                ? 'bg-rose-500/30 border-rose-400 text-rose-300 animate-pulse shadow-md shadow-rose-500/20 ring-1 ring-rose-400' 
+                : fallSpeed >= 3 
+                  ? 'bg-amber-500/30 border-amber-400 text-amber-300 shadow-md shadow-amber-500/20 ring-1 ring-amber-400'
+                  : fallSpeed >= 2 
+                    ? 'bg-purple-500/30 border-purple-400 text-purple-300'
+                    : 'bg-white/5 border-white/10 text-cyan-300 hover:bg-white/10'
+            }`}
+            title="Nhấn để đổi nhanh tốc độ rơi (0.5x, 1x, 1.5x, 2x, 3x, 10x)"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>{fallSpeed}x</span>
+          </button>
+
           <button
             onClick={() => setPlayMode(prev => prev === 'flow' ? 'step' : 'flow')}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
@@ -1233,6 +1263,49 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                       }`}
                     >
                       {th.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Falling Speed Multipliers */}
+              <div>
+                <label className="font-bold text-gray-300 block mb-1.5 flex items-center justify-between">
+                  <span>Tốc độ rơi phím nốt đàn (Falling Speed):</span>
+                  <span className={`font-mono font-black text-xs px-2 py-0.5 rounded-full border ${
+                    fallSpeed >= 10 
+                      ? 'bg-rose-500/20 border-rose-400 text-rose-300 animate-pulse' 
+                      : fallSpeed >= 3 
+                        ? 'bg-amber-500/20 border-amber-400 text-amber-300' 
+                        : 'bg-cyan-500/20 border-cyan-400 text-cyan-300'
+                  }`}>
+                    {fallSpeed}x {fallSpeed === 10 ? '💥 THẦN TỐC' : fallSpeed === 3 ? '🔥 PHẢN XẠ 3X' : ''}
+                  </span>
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mb-2">
+                  {[
+                    { val: 0.5, label: '0.5x', desc: 'Thong thả' },
+                    { val: 1.0, label: '1.0x', desc: 'Tiêu chuẩn' },
+                    { val: 1.5, label: '1.5x', desc: 'Nhanh' },
+                    { val: 2.0, label: '2.0x', desc: 'Siêu tốc' },
+                    { val: 3.0, label: '3.0x', desc: 'Phản xạ 3X' },
+                    { val: 10.0, label: '10x', desc: 'Thần tốc 10X' }
+                  ].map((sp) => (
+                    <button
+                      key={sp.val}
+                      onClick={() => handleSetSpeed(sp.val)}
+                      className={`p-2 rounded-xl text-center border transition flex flex-col items-center justify-center ${
+                        fallSpeed === sp.val
+                          ? sp.val === 10
+                            ? 'bg-rose-500/30 border-rose-400 text-rose-300 font-black shadow-lg shadow-rose-500/30 ring-1 ring-rose-400'
+                            : sp.val === 3
+                              ? 'bg-amber-500/30 border-amber-400 text-amber-300 font-black shadow-lg shadow-amber-500/30 ring-1 ring-amber-400'
+                              : 'bg-cyan-500/20 border-cyan-400 text-cyan-300 font-bold'
+                          : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="font-mono font-black text-xs">{sp.label}</span>
+                      <span className="text-[9px] opacity-75">{sp.desc}</span>
                     </button>
                   ))}
                 </div>
