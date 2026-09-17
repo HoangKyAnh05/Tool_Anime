@@ -29,7 +29,12 @@ import {
   Star,
   MessageSquare,
   PenTool,
-  Infinity as InfinityIcon
+  Infinity as InfinityIcon,
+  Clock,
+  Target,
+  TrendingUp,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   PianoKnowledgeItem, 
@@ -46,8 +51,8 @@ import { VocabWord } from '../types';
 interface ActiveTile {
   instanceId: string;
   item: PianoKnowledgeItem;
-  lane: number; // 0, 1, 2, 3
-  yProgress: number; // 0 (top) to 100 (bottom hit line)
+  lane: number;
+  yProgress: number;
   isHit: boolean;
   note: string;
   songIndex: number;
@@ -80,8 +85,14 @@ interface PianoTilesGameProps {
   onOpenWordPopup?: (word: VocabWord) => void;
 }
 
+// Get today's key string for persistent daily tracking (YYYY-MM-DD)
+function getTodayDateKey(): string {
+  const now = new Date();
+  return `ielts_tracker_${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}`;
+}
+
 export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
-  initialCategory = 'qa-speaking',
+  initialCategory = 'grammar-mastery',
   initialTopicId = 1,
   bookmarkedWords = [],
   onToggleBookmark,
@@ -101,7 +112,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
   // Play Mode: 'step' (Tile drops when key is pressed - study mode) vs 'flow' (Tiles flow continuously)
   const [playMode, setPlayMode] = useState<'flow' | 'step'>('flow');
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [fallSpeed, setFallSpeed] = useState<number>(0.9); // Slower gentle speed so learner can read full text
+  const [fallSpeed, setFallSpeed] = useState<number>(0.9);
 
   const [activeTiles, setActiveTiles] = useState<ActiveTile[]>([]);
   const [ripples, setRipples] = useState<RippleEffect[]>([]);
@@ -112,18 +123,28 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
   const [score, setScore] = useState<number>(0);
   const [combo, setCombo] = useState<number>(0);
   const [maxCombo, setMaxCombo] = useState<number>(0);
-  const [notesPlayed, setNotesPlayed] = useState<number>(0);
+  const [notesPlayed, setNotesPlayed] = useState<number>(() => {
+    const saved = localStorage.getItem(`${getTodayDateKey()}_notes`);
+    return saved ? parseInt(saved, 10) : 0;
+  });
   const [wordsMastered, setWordsMastered] = useState<number>(0);
+
+  // Real-Time Daily Playtime Tracker (in seconds)
+  const [playtimeSeconds, setPlaytimeSeconds] = useState<number>(() => {
+    const saved = localStorage.getItem(`${getTodayDateKey()}_playtime`);
+    return saved ? parseInt(saved, 10) : 0;
+  });
 
   // Audio / Speech Settings
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
   const [isTtsEnabled, setIsTtsEnabled] = useState<boolean>(true);
 
-  // Visual Theme & Details Modal
+  // Visual Theme & Modals
   const [gameTheme, setGameTheme] = useState<'pastel' | 'cyber' | 'sakura' | 'galaxy' | 'sunset'>('pastel');
   const [selectedInspectItem, setSelectedInspectItem] = useState<PianoKnowledgeItem | null>(null);
   const [showTopicModal, setShowTopicModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+  const [showBandDashboard, setShowBandDashboard] = useState<boolean>(false);
   const [topicFilter, setTopicFilter] = useState<string>('');
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
 
@@ -145,7 +166,35 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
   isPlayingRef.current = isPlaying;
   activeTilesRef.current = activeTiles;
 
-  // 1. Load Knowledge Items when Category or Topic ID changes
+  // 1. Playtime Live Stopwatch Ticking
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaytimeSeconds(prev => {
+        const next = prev + 1;
+        localStorage.setItem(`${getTodayDateKey()}_playtime`, next.toString());
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Save notes played today
+  useEffect(() => {
+    localStorage.setItem(`${getTodayDateKey()}_notes`, notesPlayed.toString());
+  }, [notesPlayed]);
+
+  // Format playtime into HH:MM:SS
+  const formatPlaytime = (totalSeconds: number): string => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const hStr = hours < 10 ? `0${hours}` : `${hours}`;
+    const mStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
+    const sStr = seconds < 10 ? `0${seconds}` : `${seconds}`;
+    return `${hStr}h ${mStr}m ${sStr}s`;
+  };
+
+  // 2. Load Knowledge Items when Category or Topic ID changes
   useEffect(() => {
     const items = getPianoKnowledgeItems(category, topicId);
     setKnowledgeItems(items);
@@ -154,13 +203,12 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     itemIndexRef.current = 0;
   }, [category, topicId]);
 
-  // 2. Spawn next knowledge tile
+  // 3. Spawn next knowledge tile
   const spawnTile = useCallback(() => {
     if (knowledgeItems.length === 0) return;
 
     const currentIdx = itemIndexRef.current;
     if (currentIdx >= knowledgeItems.length) {
-      // Reached end of current topic -> Trigger smooth transition to NEXT TOPIC!
       handleAutoAdvanceTopic();
       return;
     }
@@ -168,8 +216,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     const item = knowledgeItems[currentIdx];
     const song = selectedSong;
     const note = song.notes[songIndexRef.current % song.notes.length];
-
-    // Distribute across 4 lanes sequentially / pleasantly
     const lane = currentIdx % 4;
 
     const newTile: ActiveTile = {
@@ -187,12 +233,11 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     setSongNoteIndex(prev => prev + 1);
   }, [knowledgeItems, selectedSong]);
 
-  // 3. Auto-Advance to Next Topic (Endless 10-Hour Marathon Flow)
+  // 4. Auto-Advance to Next Topic (Endless 10-Hour Marathon Flow)
   const handleAutoAdvanceTopic = useCallback(() => {
     const next = getNextTopic(category, topicId);
     setMilestoneMessage(`🎉 Chúc Mừng Bạn! Đang tự động chuyển tiếp sang: ${next.nextTitle}`);
 
-    // Trigger celebratory confetti
     confetti({
       particleCount: 80,
       spread: 90,
@@ -200,7 +245,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     });
     pianoAudio.playSuccessChime();
 
-    // Auto-advance after a gentle delay without stopping the game
     setTimeout(() => {
       setCategory(next.nextCategory);
       setTopicId(next.nextTopicId);
@@ -208,7 +252,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     }, 2800);
   }, [category, topicId]);
 
-  // 4. Hit / Tap Note Action
+  // 5. Hit / Tap Note Action
   const handleHitNote = useCallback((laneIndex: number, specificTileId?: string) => {
     const currentList = activeTilesRef.current;
     let targetTile: ActiveTile | undefined;
@@ -222,37 +266,29 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
       }
     }
 
-    // Lane press visual feedback
     setPressedLanes(prev => ({ ...prev, [laneIndex]: true }));
     setTimeout(() => {
       setPressedLanes(prev => ({ ...prev, [laneIndex]: false }));
     }, 150);
 
-    // If step mode and no tile in lane, spawn next tile on hit!
     if (playMode === 'step' && !targetTile) {
       spawnTile();
     }
 
-    // Determine note to play
     const song = selectedSong;
     const note = targetTile ? targetTile.note : song.notes[songIndexRef.current % song.notes.length];
 
-    // Play Piano Sound
     pianoAudio.playPianoNote(note, 1.8, 0.9);
-
-    // Trigger visual ripple & floating music notes
     triggerVisualFX(laneIndex);
 
     if (targetTile) {
       const hitTile = targetTile;
       setActiveTiles(prev => prev.map(t => t.instanceId === hitTile.instanceId ? { ...t, isHit: true } : t));
 
-      // Speak English text (TTS)
       if (isTtsEnabled) {
         pianoAudio.speakEnglish(hitTile.item.englishText);
       }
 
-      // Update scores & combos
       setScore(prev => prev + 100 + combo * 10);
       setCombo(prev => {
         const next = prev + 1;
@@ -262,7 +298,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
       setNotesPlayed(prev => prev + 1);
       setWordsMastered(prev => prev + 1);
 
-      // In step mode, spawn next sentence/note upon hitting
       if (playMode === 'step') {
         setTimeout(() => spawnTile(), 300);
       }
@@ -272,7 +307,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     }
   }, [playMode, selectedSong, isTtsEnabled, combo, spawnTile]);
 
-  // 5. Visual Effects (Ripple wave rings & Floating symbols)
+  // 6. Visual Effects
   const triggerVisualFX = (laneIndex: number) => {
     const newRipple: RippleEffect = {
       id: Date.now() + Math.random(),
@@ -296,7 +331,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     setFloatingNotes(prev => [...prev.slice(-12), newNote]);
   };
 
-  // Clean up expired ripples & floating notes
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
@@ -306,7 +340,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // 6. Smooth Animation Loop for Falling Tiles
+  // 7. Falling Loop
   useEffect(() => {
     let lastTime = performance.now();
 
@@ -321,7 +355,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
           nextSpawnTimeRef.current = currentTime + (spawnInterval * 1000);
         }
 
-        // Gentle falling movement (adjusted for clear reading without rush)
         const movement = 12 * fallSpeed * delta;
         setActiveTiles(prev => {
           return prev
@@ -342,7 +375,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     };
   }, [playMode, fallSpeed, spawnTile]);
 
-  // Initial spawn
   useEffect(() => {
     if (knowledgeItems.length > 0 && activeTiles.length === 0) {
       spawnTile();
@@ -352,7 +384,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     }
   }, [knowledgeItems, playMode, spawnTile]);
 
-  // 7. Keyboard Shortcuts (D, F, J, K | 1, 2, 3, 4 | Space | Piano Keys)
+  // 8. Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
@@ -360,7 +392,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
       }
 
       const key = e.key.toLowerCase();
-      
       if (key === 'd' || key === 'a' || key === '1') {
         e.preventDefault();
         handleHitNote(0);
@@ -412,7 +443,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     }
   };
 
-  // Theme styling configurations
+  // Theme styling
   const themeStyles = {
     pastel: {
       bg: 'linear-gradient(135deg, #1e152a 0%, #15182e 50%, #1c2237 100%)',
@@ -478,6 +509,21 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
 
   const curTheme = themeStyles[gameTheme];
 
+  // Milestone Gates Calculation
+  const TARGET_NOTES = 6000;
+  const TARGET_PLAYTIME_SECONDS = 36000; // 10 hours
+  const progressNotesPercent = Math.min(100, Math.round((notesPlayed / TARGET_NOTES) * 100));
+  const progressTimePercent = Math.min(100, Math.round((playtimeSeconds / TARGET_PLAYTIME_SECONDS) * 100));
+  const overallBandGain = (Math.min(1.0, notesPlayed / TARGET_NOTES) * 0.5).toFixed(2);
+
+  const gates = [
+    { gate: 1, name: "Gate 1: Phản Xạ Speaking Part 1 & 2", notes: 1500, time: "2.5h", gain: "+0.10 Band", passed: notesPlayed >= 1500 },
+    { gate: 2, name: "Gate 2: Cấu Trúc Writing Task 1 & 2", notes: 2700, time: "4.5h", gain: "+0.20 Band", passed: notesPlayed >= 2700 },
+    { gate: 3, name: "Gate 3: Tư Duy Vĩ Mô & Listening", notes: 4200, time: "7.0h", gain: "+0.30 Band", passed: notesPlayed >= 4200 },
+    { gate: 4, name: "Gate 4: 8 Cấu Trúc & Bẫy Lỗi 5.0-8.5", notes: 5400, time: "9.0h", gain: "+0.40 Band", passed: notesPlayed >= 5400 },
+    { gate: 5, name: "Gate 5: Master 1000 Q&A Hoàn Mỹ", notes: 6000, time: "10.0h", gain: "+0.50 Band", passed: notesPlayed >= 6000 }
+  ];
+
   const topicsCatalog = getTopicsCatalogForCategory(category);
   const filteredCatalog = topicsCatalog.filter(t => 
     t.title.toLowerCase().includes(topicFilter.toLowerCase()) ||
@@ -490,93 +536,81 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
       className="relative flex flex-col h-full w-full select-none overflow-hidden text-white font-sans"
       style={{ background: curTheme.bg }}
     >
-      {/* 1. TOP HEADER / STATS HUD */}
-      <div className="flex items-center justify-between px-4 py-2 bg-black/50 border-b border-white/10 backdrop-blur-md z-30">
-        {/* Left: Topic Selector & Song Selector */}
+      {/* 1. TOP HEADER / STATS & LIVE DAILY PLAYTIME HUD */}
+      <div className="flex items-center justify-between px-3 py-2 bg-black/60 border-b border-white/10 backdrop-blur-md z-30 flex-wrap gap-2">
+        {/* Left: Topic Selector */}
         <div className="flex items-center gap-2">
-          {/* Topic Switcher Button */}
           <button
             onClick={() => setShowTopicModal(true)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-left transition group shadow-md"
-            title="Đổi bộ câu hỏi / chủ đề (500 Speaking Q&A, 500 Writing Q&A, 100 Chương Novel)"
+            title="Đổi chủ đề bài học / 5 Trụ cột tri thức / 1000 Q&A"
           >
             <Layers className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition" />
             <div className="flex flex-col">
               <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider">
+                {category === 'grammar-mastery' && '🏛️ 8 Cấu Trúc Ngữ Pháp (GRA 8.5+)'}
+                {category === 'connectors-matrix' && '🔗 Ma Trận Từ Nối Cohesion (CC)'}
+                {category === 'paraphrase-matrix' && '📚 Bảng Paraphrase Thay Thế (LR)'}
+                {category === 'spoken-idioms' && '🎙️ Thành Ngữ Tự Nhiên (Speaking 7.5+)'}
+                {category === 'listening-phonology' && '🎧 Ngữ Âm Nối Âm & Bẫy Listening'}
                 {category === 'qa-speaking' && `🎙️ Speaking Q&A Gói ${topicId}/25`}
                 {category === 'qa-writing' && `✍️ Writing Q&A Gói ${topicId}/25`}
                 {category === 'qa-master' && `♾️ Master 1000 Q&A Giai Đoạn ${topicId}/34`}
                 {category === 'chapter' && `📖 Chương ${topicId}/100 • Novel`}
-                {category === 'writing' && `Writing Lab ${topicId}/100`}
-                {category === 'speaking' && `Speaking ${topicId}/100`}
-                {category === 'listening' && `Listening ${topicId}/100`}
                 {category === 'mistakes' && `Bẫy Lỗi 5.0 - 8.0`}
                 {category === 'vocab-vault' && `Kho Từ Vựng Nhóm ${topicId}`}
               </span>
-              <span className="text-xs font-bold text-white truncate max-w-[170px] sm:max-w-[240px]">
-                {knowledgeItems[0]?.topicTitle || 'Chủ Đề 1000 Q&A'}
+              <span className="text-xs font-bold text-white truncate max-w-[160px] sm:max-w-[220px]">
+                {knowledgeItems[0]?.topicTitle || 'Chủ Đề Đang Học'}
               </span>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-white" />
           </button>
 
-          {/* Song Melody Selector */}
-          <div className="relative group hidden sm:block">
-            <button
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-pink-300 transition"
-              title="Đổi bản nhạc Piano đang chơi"
-            >
-              <Music className="w-3.5 h-3.5 text-pink-400 animate-pulse" />
-              <span className="truncate max-w-[120px]">{selectedSong.title}</span>
-            </button>
-            <div className="absolute left-0 top-full mt-1 hidden group-hover:flex flex-col w-56 bg-slate-900/95 backdrop-blur-md border border-white/15 rounded-xl p-1.5 shadow-2xl z-50">
-              <div className="text-[10px] font-bold text-gray-400 px-2 py-1 uppercase">Giai Điệu Piano</div>
-              {PIANO_SONGS.map(song => (
-                <button
-                  key={song.id}
-                  onClick={() => {
-                    setSelectedSong(song);
-                    setSongNoteIndex(0);
-                  }}
-                  className={`text-left px-2.5 py-1.5 rounded-lg text-xs transition flex flex-col ${
-                    selectedSong.id === song.id ? 'bg-pink-500/20 text-pink-300 font-bold' : 'text-gray-300 hover:bg-white/10'
-                  }`}
-                >
-                  <span>🎵 {song.title}</span>
-                  <span className="text-[10px] text-gray-400">{song.author}</span>
-                </button>
-              ))}
-            </div>
+          {/* Daily Playtime Stopwatch Live Tracker */}
+          <div 
+            onClick={() => setShowBandDashboard(true)}
+            className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 text-xs font-mono font-bold text-indigo-200 transition shadow-md group"
+            title="Nhấn để xem Bảng Đo Đạc Mốc Đạt +0.5 Band Hôm Nay"
+          >
+            <Clock className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+            <span>⏱️ {formatPlaytime(playtimeSeconds)}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-400 text-black font-extrabold group-hover:scale-105 transition">
+              +{overallBandGain} Band
+            </span>
           </div>
         </div>
 
-        {/* Center: Progress & Combo Counter */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-xl border border-white/10">
-            <Flame className={`w-4 h-4 ${combo > 5 ? 'text-amber-400 animate-bounce' : 'text-gray-400'}`} />
-            <span className="text-xs font-extrabold text-amber-300">
-              {combo} <span className="text-[10px] font-normal text-gray-400">COMBO</span>
-            </span>
+        {/* Center: Band +0.5 Milestone Bar */}
+        <div 
+          onClick={() => setShowBandDashboard(true)}
+          className="cursor-pointer flex items-center gap-3 bg-white/5 hover:bg-white/10 px-3 py-1 rounded-xl border border-white/10 transition"
+          title="Bảng đo lường 5 Cổng Mốc (KPI Gates) đạt +0.5 Band"
+        >
+          <div className="flex items-center gap-1.5">
+            <Target className="w-4 h-4 text-emerald-400" />
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2 text-[10px] font-bold">
+                <span className="text-gray-300">Mục tiêu +0.5 Band Hôm Nay:</span>
+                <span className="text-emerald-300 font-mono">{progressNotesPercent}% ({notesPlayed}/6,000 Nốt)</span>
+              </div>
+              <div className="w-36 h-1.5 bg-gray-700 rounded-full overflow-hidden mt-0.5">
+                <div 
+                  className="h-full bg-gradient-to-r from-cyan-400 via-indigo-500 to-emerald-400 transition-all duration-300"
+                  style={{ width: `${progressNotesPercent}%` }}
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-2 bg-white/5 px-3 py-1 rounded-xl border border-white/10">
-            <Star className="w-4 h-4 text-cyan-400" />
-            <span className="text-xs font-extrabold text-cyan-300">
-              {notesPlayed} <span className="text-[10px] font-normal text-gray-400">NỐT ĐÀN</span>
-            </span>
-          </div>
-
-          <div className="hidden lg:flex items-center gap-2 bg-white/5 px-3 py-1 rounded-xl border border-white/10">
-            <Award className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-extrabold text-emerald-300">
-              {currentItemIndex}/{knowledgeItems.length} <span className="text-[10px] font-normal text-gray-400">TIẾN ĐỘ</span>
-            </span>
+          <div className="flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded-lg border border-white/10">
+            <Flame className={`w-3.5 h-3.5 ${combo > 5 ? 'text-amber-400 animate-bounce' : 'text-gray-400'}`} />
+            <span className="text-xs font-extrabold text-amber-300 font-mono">{combo}x</span>
           </div>
         </div>
 
         {/* Right: Controls */}
         <div className="flex items-center gap-1.5">
-          {/* Play Mode: Flow vs Step */}
           <button
             onClick={() => setPlayMode(prev => prev === 'flow' ? 'step' : 'flow')}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
@@ -589,46 +623,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
             {playMode === 'step' ? '🎯 Chờ Phím' : '🌊 Rơi Tự Do'}
           </button>
 
-          {/* Speed Selector */}
-          <div className="relative group">
-            <button
-              className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-cyan-300 transition"
-              title="Tốc độ rơi nốt"
-            >
-              {fallSpeed <= 0.7 && '🐢 0.7x'}
-              {fallSpeed > 0.7 && fallSpeed <= 1.0 && '🚶 1.0x'}
-              {fallSpeed > 1.0 && fallSpeed <= 1.5 && '🏃 1.5x'}
-              {fallSpeed > 1.5 && '⚡ 2.0x'}
-            </button>
-            <div className="absolute right-0 top-full mt-1 hidden group-hover:flex flex-col w-32 bg-slate-900/95 backdrop-blur-md border border-white/15 rounded-xl p-1 shadow-xl z-50">
-              <button
-                onClick={() => setFallSpeed(0.7)}
-                className={`text-left px-2 py-1 text-xs rounded ${fallSpeed === 0.7 ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-gray-300 hover:bg-white/5'}`}
-              >
-                🐢 Rất Chậm (0.7x)
-              </button>
-              <button
-                onClick={() => setFallSpeed(0.9)}
-                className={`text-left px-2 py-1 text-xs rounded ${fallSpeed === 0.9 ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-gray-300 hover:bg-white/5'}`}
-              >
-                🚶 Chậm Chuẩn (0.9x)
-              </button>
-              <button
-                onClick={() => setFallSpeed(1.4)}
-                className={`text-left px-2 py-1 text-xs rounded ${fallSpeed === 1.4 ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-gray-300 hover:bg-white/5'}`}
-              >
-                🏃 Vừa Phải (1.4x)
-              </button>
-              <button
-                onClick={() => setFallSpeed(2.0)}
-                className={`text-left px-2 py-1 text-xs rounded ${fallSpeed === 2.0 ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-gray-300 hover:bg-white/5'}`}
-              >
-                ⚡ Nhanh (2.0x)
-              </button>
-            </div>
-          </div>
-
-          {/* TTS Audio Speech Toggle */}
           <button
             onClick={handleToggleTts}
             className={`p-1.5 rounded-lg border transition ${
@@ -641,7 +635,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
             <Volume2 className="w-4 h-4" />
           </button>
 
-          {/* Mute Piano Sound */}
           <button
             onClick={handleToggleMute}
             className={`p-1.5 rounded-lg border transition ${
@@ -654,16 +647,14 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
             {isAudioMuted ? <VolumeX className="w-4 h-4" /> : <Music className="w-4 h-4" />}
           </button>
 
-          {/* Next Topic Button */}
           <button
             onClick={handleAutoAdvanceTopic}
             className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
-            title="Chuyển ngay sang gói câu hỏi tiếp theo"
+            title="Chuyển ngay sang gói tiếp theo"
           >
             <SkipForward className="w-4 h-4" />
           </button>
 
-          {/* Settings Modal Toggle */}
           <button
             onClick={() => setShowSettingsModal(true)}
             className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
@@ -672,7 +663,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
             <Sliders className="w-4 h-4" />
           </button>
 
-          {/* Full Screen */}
           <button
             onClick={handleToggleFullScreen}
             className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
@@ -706,7 +696,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                 borderColor: curTheme.laneBorder
               }}
             >
-              {/* Lane Ambient Background Floating Light */}
               <div 
                 className="absolute inset-0 pointer-events-none opacity-20"
                 style={{
@@ -714,18 +703,17 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                 }}
               />
 
-              {/* Lane Key Guide Indicator at Top */}
               <div className="absolute top-2 left-1/2 -translate-x-1/2 text-gray-500 font-mono font-bold text-xs pointer-events-none opacity-40">
                 Làn {laneIndex + 1}
               </div>
 
-              {/* ACTIVE FALLING TILES IN THIS LANE (100% UNTRUNCATED TEXT) */}
+              {/* ACTIVE FALLING TILES (100% UNTRUNCATED TEXT) */}
               {activeTiles
                 .filter(tile => tile.lane === laneIndex)
                 .map((tile) => {
                   const isHit = tile.isHit;
                   const item = tile.item;
-                  const isQuestion = item.itemType === 'qa-question';
+                  const isQuestion = item.itemType === 'qa-question' || item.itemType === 'mastery-rule';
 
                   return (
                     <div
@@ -749,7 +737,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                         zIndex: 10
                       }}
                     >
-                      {/* Top Bar of Tile: Step Role Badge & Note Tag */}
+                      {/* Step Badge */}
                       <div className="flex items-center justify-between gap-1 mb-1.5 flex-wrap">
                         {item.qaStepBadge ? (
                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border flex items-center gap-1 ${
@@ -812,7 +800,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                         </p>
                       </div>
 
-                      {/* Tap Prompt Ripple Ring on Tile */}
                       {isHit && (
                         <div className="absolute inset-0 rounded-2xl border-2 border-emerald-300 animate-ping pointer-events-none" />
                       )}
@@ -820,7 +807,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                   );
                 })}
 
-              {/* HIT LINE / TARGET STRIKE ZONE */}
+              {/* HIT LINE */}
               <div 
                 className="absolute left-0 right-0 z-20 pointer-events-none flex items-center justify-center"
                 style={{
@@ -833,7 +820,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                 <div className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
               </div>
 
-              {/* RIPPLE EFFECT WAVES ON TAP */}
+              {/* RIPPLE EFFECTS */}
               {ripples
                 .filter(r => r.lane === laneIndex)
                 .map((ripple) => (
@@ -851,7 +838,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                   />
                 ))}
 
-              {/* FLOATING MUSIC SYMBOLS & PARTICLES */}
+              {/* FLOATING NOTES */}
               {floatingNotes
                 .filter(n => n.lane === laneIndex)
                 .map((note) => (
@@ -871,7 +858,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                   </div>
                 ))}
 
-              {/* LANE BOTTOM KEY BUTTON (PRESSABLE) */}
+              {/* LANE BOTTOM KEY BUTTON */}
               <div
                 className="relative z-30 h-18 py-2 flex flex-col items-center justify-center border-t transition-all"
                 style={{
@@ -929,7 +916,105 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
         ))}
       </div>
 
-      {/* 5. TOPIC SELECTION MODAL (1000 Q&A MASTER, 500 SPEAKING, 500 WRITING, NOVEL CHAPTERS) */}
+      {/* 5. DAILY +0.5 BAND DASHBOARD & MILESTONE GATES MODAL */}
+      {showBandDashboard && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+          onClick={() => setShowBandDashboard(false)}
+        >
+          <div 
+            className="w-full max-w-2xl bg-slate-900/95 border border-cyan-500/40 rounded-3xl p-6 shadow-2xl text-white max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+              <div>
+                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  🎯 LỘ TRÌNH ĐẠT +0.5 BAND HÔM NAY
+                </span>
+                <h3 className="text-xl font-black text-white mt-1 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-emerald-400" /> Bảng Đo Đạc 5 Cổng Mốc (KPI Gates)
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowBandDashboard(false)}
+                className="px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold"
+              >
+                Đóng
+              </button>
+            </div>
+
+            {/* Top Score Summary Cards */}
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-center">
+                <div className="text-[10px] text-indigo-300 font-bold uppercase mb-1">Thời Gian Chơi Hôm Nay</div>
+                <div className="text-base sm:text-lg font-mono font-black text-indigo-200">{formatPlaytime(playtimeSeconds)}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Mục tiêu: 10 Tiếng</div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 text-center">
+                <div className="text-[10px] text-cyan-300 font-bold uppercase mb-1">Tổng Nốt Đã Đánh</div>
+                <div className="text-base sm:text-lg font-mono font-black text-cyan-200">{notesPlayed} / 6,000</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Tiến độ: {progressNotesPercent}%</div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-center">
+                <div className="text-[10px] text-emerald-300 font-bold uppercase mb-1">Mức Tăng Ước Tính</div>
+                <div className="text-base sm:text-lg font-mono font-black text-emerald-300">+{overallBandGain} Band</div>
+                <div className="text-[10px] text-emerald-400/80 mt-0.5">Mục tiêu: +0.50 Band</div>
+              </div>
+            </div>
+
+            {/* 5 Milestone Gates Roadmap */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Trạng Thái 5 Cổng Mốc Đạt Chuẩn:</h4>
+              {gates.map((g) => (
+                <div 
+                  key={g.gate}
+                  className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${
+                    g.passed 
+                      ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg shadow-emerald-500/10' 
+                      : 'bg-white/5 border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                      g.passed ? 'bg-emerald-500 text-black' : 'bg-white/10 text-gray-400'
+                    }`}>
+                      {g.passed ? <CheckCircle2 className="w-5 h-5" /> : `G${g.gate}`}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-2">
+                        <span>{g.name}</span>
+                        {g.passed && <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">HOÀN THÀNH</span>}
+                      </div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">
+                        Chỉ tiêu: <span className="text-cyan-300 font-mono font-bold">{g.notes} Nốt</span> ({g.time} học tập)
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className={`text-xs font-mono font-black ${g.passed ? 'text-emerald-300' : 'text-gray-400'}`}>
+                      {g.gain}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tip Footer */}
+            <div className="mt-5 p-3 rounded-2xl bg-white/5 border border-white/10 text-[11px] text-gray-300 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>Bí quyết đạt chuẩn:</strong> Khi đạt đủ <strong>6,000 nốt (10 tiếng)</strong> và vượt qua cả 5 Gate, toàn bộ 1,000 câu mẫu và 8 cấu trúc ngữ pháp Band 8.5+ sẽ ngấm sâu thành phản xạ tự nhiên giúp bạn chắc chắn nâng +0.5 Band!
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. TOPIC SELECTION MODAL (INCLUDING 5 CORE MASTERY PILLARS) */}
       {showTopicModal && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
@@ -943,10 +1028,10 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
             <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
               <div>
                 <h3 className="text-lg font-bold flex items-center gap-2 text-cyan-400">
-                  <Layers className="w-5 h-5" /> Danh Mục 1000 Câu Hỏi & Câu Trả Lời Mẫu IELTS (Chuỗi 5 Câu)
+                  <Layers className="w-5 h-5" /> Danh Mục Toàn Bộ Kiến Thức IELTS (1000 Q&A + 5 Trụ Cột Cốt Lõi)
                 </h3>
                 <p className="text-xs text-gray-400">
-                  Nốt 1 là Câu hỏi ➔ Các nốt sau là từng câu trả lời hoàn chỉnh Band 8.5+ không bị che chữ
+                  Chọn chủ đề để luyện phím đàn song ngữ và củng cố toàn diện 4 kỹ năng
                 </p>
               </div>
               <button
@@ -960,13 +1045,63 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-3 border-b border-white/10 no-scrollbar">
               <button
+                onClick={() => setCategory('grammar-mastery')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                  category === 'grammar-mastery' ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-black shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>🏛️ 8 Cấu Trúc Ngữ Pháp 8.5+</span>
+              </button>
+
+              <button
+                onClick={() => setCategory('connectors-matrix')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                  category === 'connectors-matrix' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>🔗 Ma Trận Từ Nối Cohesion</span>
+              </button>
+
+              <button
+                onClick={() => setCategory('paraphrase-matrix')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                  category === 'paraphrase-matrix' ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>📚 Bảng Paraphrase Thay Thế</span>
+              </button>
+
+              <button
+                onClick={() => setCategory('spoken-idioms')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                  category === 'spoken-idioms' ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300'
+                }`}
+              >
+                <Mic className="w-3.5 h-3.5" />
+                <span>🎙️ Thành Ngữ Spoken Idioms</span>
+              </button>
+
+              <button
+                onClick={() => setCategory('listening-phonology')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                  category === 'listening-phonology' ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300'
+                }`}
+              >
+                <Headphones className="w-3.5 h-3.5" />
+                <span>🎧 Ngữ Âm Nối Âm & Bẫy Listening</span>
+              </button>
+
+              <button
                 onClick={() => setCategory('qa-speaking')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
                   category === 'qa-speaking' ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300'
                 }`}
               >
                 <Mic className="w-3.5 h-3.5" />
-                <span>🎙️ 500 Speaking Q&A (25 Gói)</span>
+                <span>🎙️ 500 Speaking Q&A</span>
               </button>
 
               <button
@@ -976,17 +1111,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                 }`}
               >
                 <PenTool className="w-3.5 h-3.5" />
-                <span>✍️ 500 Writing Q&A (Task 1 & 2)</span>
-              </button>
-
-              <button
-                onClick={() => setCategory('qa-master')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
-                  category === 'qa-master' ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-black shadow-lg' : 'bg-white/5 hover:bg-white/10 text-gray-300'
-                }`}
-              >
-                <InfinityIcon className="w-3.5 h-3.5" />
-                <span>♾️ Master 1000 Q&A Bất Tận</span>
+                <span>✍️ 500 Writing Q&A</span>
               </button>
 
               <button
@@ -1014,7 +1139,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
             <div className="mb-3">
               <input
                 type="text"
-                placeholder="Tìm nhanh theo chủ đề Q&A, câu hỏi tiếng Việt hoặc tiếng Anh..."
+                placeholder="Tìm nhanh theo chủ đề tiếng Việt hoặc tiếng Anh..."
                 value={topicFilter}
                 onChange={(e) => setTopicFilter(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
@@ -1056,7 +1181,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px] text-gray-400 mt-2">
-                      <span>🎵 Chuỗi 5 Câu Mẫu</span>
+                      <span>🎵 Giai điệu học tập</span>
                       <span className="text-amber-300 font-bold">{t.itemCount} Nốt đàn</span>
                     </div>
                   </button>
@@ -1067,7 +1192,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
         </div>
       )}
 
-      {/* 6. SETTINGS MODAL */}
+      {/* 7. SETTINGS MODAL */}
       {showSettingsModal && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
@@ -1090,7 +1215,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
             </div>
 
             <div className="space-y-4 text-xs">
-              {/* Theme Picker */}
               <div>
                 <label className="font-bold text-gray-300 block mb-1.5">Giao diện màu (Theme):</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -1114,7 +1238,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                 </div>
               </div>
 
-              {/* Audio Speed Rate */}
               <div>
                 <label className="font-bold text-gray-300 block mb-1">Tốc độ đọc phát âm tiếng Anh (TTS):</label>
                 <input 
@@ -1128,7 +1251,6 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                 />
               </div>
 
-              {/* Keyboard Shortcuts Info */}
               <div className="bg-white/5 p-3 rounded-xl border border-white/10 space-y-1">
                 <div className="font-bold text-cyan-300">⌨️ Phím tắt chơi đàn trên bàn phím:</div>
                 <div className="text-gray-300 text-[11px]">• 4 Làn chuẩn: <span className="text-amber-300 font-mono font-bold">D, F, J, K</span> hoặc <span className="text-amber-300 font-mono font-bold">1, 2, 3, 4</span></div>
@@ -1140,7 +1262,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
         </div>
       )}
 
-      {/* 7. DEEP INSPECTION POPUP MODAL FOR KNOWLEDGE ITEM */}
+      {/* 8. DEEP INSPECTION POPUP MODAL FOR KNOWLEDGE ITEM */}
       {selectedInspectItem && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
@@ -1189,10 +1311,15 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
 
               {selectedInspectItem.exampleSentence && (
                 <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Câu hỏi / Ngữ cảnh gốc</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Câu ví dụ / Ngữ cảnh ứng dụng</div>
                   <div className="text-xs text-gray-200 italic font-serif">
                     "{selectedInspectItem.exampleSentence}"
                   </div>
+                  {selectedInspectItem.exampleSentenceVi && (
+                    <div className="text-[11px] text-gray-400 mt-1">
+                      🇻🇳 {selectedInspectItem.exampleSentenceVi}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1211,7 +1338,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
 
               {selectedInspectItem.explanation && (
                 <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Chiến lược & Hướng dẫn</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Phân tích & Hướng dẫn chiến lược</div>
                   <p className="text-xs text-gray-300 leading-relaxed">
                     {selectedInspectItem.explanation}
                   </p>
