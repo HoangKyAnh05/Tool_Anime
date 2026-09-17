@@ -617,89 +617,107 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
           </div>
         </div>
 
-        {/* Right: Controls */}
-        <div className="flex items-center gap-1.5">
-          {/* Quick Speed Switcher Button with 3x and 10x */}
-          <button
-            onClick={() => {
-              const speeds = [0.5, 1.0, 1.5, 2.0, 3.0, 10.0];
-              const nextIdx = (speeds.indexOf(fallSpeed) + 1) % speeds.length;
-              handleSetSpeed(speeds[nextIdx >= 0 ? nextIdx : 1]);
-            }}
-            className={`px-2 py-1 rounded-lg text-xs font-mono font-black border flex items-center gap-1 transition ${
-              fallSpeed >= 10 
-                ? 'bg-rose-500/30 border-rose-400 text-rose-300 animate-pulse shadow-md shadow-rose-500/20 ring-1 ring-rose-400' 
-                : fallSpeed >= 3 
-                  ? 'bg-amber-500/30 border-amber-400 text-amber-300 shadow-md shadow-amber-500/20 ring-1 ring-amber-400'
-                  : fallSpeed >= 2 
-                    ? 'bg-purple-500/30 border-purple-400 text-purple-300'
-                    : 'bg-white/5 border-white/10 text-cyan-300 hover:bg-white/10'
-            }`}
-            title="Nhấn để đổi nhanh tốc độ rơi (0.5x, 1x, 1.5x, 2x, 3x, 10x)"
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span>{fallSpeed}x</span>
-          </button>
+        {/* Right: Controls & Prominent 1-Click Speed Bar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* PROMINENT DIRECT SPEED SELECTOR (1-CLICK SWITCH) */}
+          <div className="flex items-center bg-black/70 p-1 rounded-xl border border-cyan-500/30 gap-1 shadow-lg backdrop-blur-md">
+            <div className="flex items-center gap-1 pl-1.5 pr-1 text-[11px] font-black text-amber-400">
+              <Zap className="w-3.5 h-3.5 animate-pulse" />
+              <span className="hidden md:inline uppercase tracking-wider">Tốc độ:</span>
+            </div>
+            {[
+              { val: 0.5, label: '0.5x', title: 'Thong thả' },
+              { val: 1.0, label: '1x', title: 'Chuẩn' },
+              { val: 1.5, label: '1.5x', title: 'Nhanh' },
+              { val: 2.0, label: '2x', title: 'Siêu tốc' },
+              { val: 3.0, label: '🔥 3x', title: 'Phản xạ 3X' },
+              { val: 10.0, label: '💥 10x', title: 'Thần tốc 10X' }
+            ].map(sp => {
+              const isActive = fallSpeed === sp.val;
+              return (
+                <button
+                  key={sp.val}
+                  onClick={() => handleSetSpeed(sp.val)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-black transition-all transform active:scale-95 cursor-pointer select-none ${
+                    isActive
+                      ? sp.val === 10
+                        ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-500 text-white shadow-lg shadow-rose-600/50 ring-2 ring-white scale-105 animate-pulse'
+                        : sp.val === 3
+                          ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-lg shadow-amber-500/50 ring-2 ring-white scale-105'
+                          : sp.val >= 2
+                            ? 'bg-purple-600 text-white shadow-md shadow-purple-500/40 ring-2 ring-purple-300 scale-105'
+                            : 'bg-cyan-500 text-black shadow-md shadow-cyan-500/30 ring-2 ring-cyan-200 scale-105'
+                      : 'bg-white/5 hover:bg-white/20 text-gray-300 hover:text-white border border-white/5'
+                  }`}
+                  title={`Bấm để chuyển ngay sang Tốc độ ${sp.label} (${sp.title})`}
+                >
+                  {sp.label}
+                </button>
+              );
+            })}
+          </div>
 
-          <button
-            onClick={() => setPlayMode(prev => prev === 'flow' ? 'step' : 'flow')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
-              playMode === 'step' 
-                ? 'bg-purple-600 border-purple-400 text-white shadow-lg shadow-purple-500/20' 
-                : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
-            }`}
-            title="Chế độ 'Chờ Phím' (Gõ phím mới rơi nốt câu tiếp theo) vs 'Rơi Tự Do' (Trôi liên tục)"
-          >
-            {playMode === 'step' ? '🎯 Chờ Phím' : '🌊 Rơi Tự Do'}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setPlayMode(prev => prev === 'flow' ? 'step' : 'flow')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
+                playMode === 'step' 
+                  ? 'bg-purple-600 border-purple-400 text-white shadow-lg shadow-purple-500/20' 
+                  : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+              }`}
+              title="Chế độ 'Chờ Phím' (Gõ phím mới rơi nốt câu tiếp theo) vs 'Rơi Tự Do' (Trôi liên tục)"
+            >
+              {playMode === 'step' ? '🎯 Chờ Phím' : '🌊 Rơi Tự Do'}
+            </button>
 
-          <button
-            onClick={handleToggleTts}
-            className={`p-1.5 rounded-lg border transition ${
-              isTtsEnabled 
-                ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' 
-                : 'bg-white/5 border-white/10 text-gray-500'
-            }`}
-            title={isTtsEnabled ? 'Đang BẬT đọc phát âm tiếng Anh chuẩn khi gõ' : 'Đang TẮT phát âm'}
-          >
-            <Volume2 className="w-4 h-4" />
-          </button>
+            <button
+              onClick={handleToggleTts}
+              className={`p-1.5 rounded-lg border transition ${
+                isTtsEnabled 
+                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' 
+                  : 'bg-white/5 border-white/10 text-gray-500'
+              }`}
+              title={isTtsEnabled ? 'Đang BẬT đọc phát âm tiếng Anh chuẩn khi gõ' : 'Đang TẮT phát âm'}
+            >
+              <Volume2 className="w-4 h-4" />
+            </button>
 
-          <button
-            onClick={handleToggleMute}
-            className={`p-1.5 rounded-lg border transition ${
-              !isAudioMuted 
-                ? 'bg-pink-500/20 border-pink-400 text-pink-300' 
-                : 'bg-white/5 border-white/10 text-gray-500'
-            }`}
-            title={!isAudioMuted ? 'Đang BẬT âm thanh tiếng đàn Piano' : 'Đang TẮT âm thanh đàn'}
-          >
-            {isAudioMuted ? <VolumeX className="w-4 h-4" /> : <Music className="w-4 h-4" />}
-          </button>
+            <button
+              onClick={handleToggleMute}
+              className={`p-1.5 rounded-lg border transition ${
+                !isAudioMuted 
+                  ? 'bg-pink-500/20 border-pink-400 text-pink-300' 
+                  : 'bg-white/5 border-white/10 text-gray-500'
+              }`}
+              title={!isAudioMuted ? 'Đang BẬT âm thanh tiếng đàn Piano' : 'Đang TẮT âm thanh đàn'}
+            >
+              {isAudioMuted ? <VolumeX className="w-4 h-4" /> : <Music className="w-4 h-4" />}
+            </button>
 
-          <button
-            onClick={handleAutoAdvanceTopic}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
-            title="Chuyển ngay sang gói tiếp theo"
-          >
-            <SkipForward className="w-4 h-4" />
-          </button>
+            <button
+              onClick={handleAutoAdvanceTopic}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
+              title="Chuyển ngay sang gói tiếp theo"
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
 
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
-            title="Cài đặt giao diện & phím bấm"
-          >
-            <Sliders className="w-4 h-4" />
-          </button>
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
+              title="Cài đặt giao diện & phím bấm"
+            >
+              <Sliders className="w-4 h-4" />
+            </button>
 
-          <button
-            onClick={handleToggleFullScreen}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
-            title="Toàn màn hình"
-          >
-            {isFullScreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-          </button>
+            <button
+              onClick={handleToggleFullScreen}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition"
+              title="Toàn màn hình"
+            >
+              {isFullScreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
       </div>
 
