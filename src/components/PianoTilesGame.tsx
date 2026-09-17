@@ -151,6 +151,9 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
   const [gameTheme, setGameTheme] = useState<'pastel' | 'cyber' | 'sakura' | 'galaxy' | 'sunset'>('pastel');
   const [selectedInspectItem, setSelectedInspectItem] = useState<PianoKnowledgeItem | null>(null);
   const [showTopicModal, setShowTopicModal] = useState<boolean>(false);
+  const [showSongModal, setShowSongModal] = useState<boolean>(false);
+  const [songCategoryFilter, setSongCategoryFilter] = useState<string>('all');
+  const [songSearchQuery, setSongSearchQuery] = useState<string>('');
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [showBandDashboard, setShowBandDashboard] = useState<boolean>(false);
   const [topicFilter, setTopicFilter] = useState<string>('');
@@ -303,6 +306,7 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
         setMaxCombo(m => Math.max(m, next));
         return next;
       });
+      // STRICT ANTI-SPAM: Only count towards 6000 daily notes upon successful knowledge tile hit
       setNotesPlayed(prev => prev + 1);
       setWordsMastered(prev => prev + 1);
 
@@ -310,8 +314,9 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
         setTimeout(() => spawnTile(), 300);
       }
     } else {
-      setNotesPlayed(prev => prev + 1);
+      // EMPTY / SPAM TAP: DO NOT count notesPlayed! Reset combo
       setSongNoteIndex(prev => prev + 1);
+      setCombo(0);
     }
   }, [playMode, selectedSong, isTtsEnabled, combo, spawnTile]);
 
@@ -538,6 +543,14 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     t.titleEn.toLowerCase().includes(topicFilter.toLowerCase())
   );
 
+  const filteredSongs = PIANO_SONGS.filter(s => {
+    const matchesCat = songCategoryFilter === 'all' || s.category === songCategoryFilter;
+    const matchesSearch = s.title.toLowerCase().includes(songSearchQuery.toLowerCase()) ||
+                          s.author.toLowerCase().includes(songSearchQuery.toLowerCase()) ||
+                          s.description.toLowerCase().includes(songSearchQuery.toLowerCase());
+    return matchesCat && matchesSearch;
+  });
+
   return (
     <div 
       ref={containerRef}
@@ -546,8 +559,8 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
     >
       {/* 1. TOP HEADER / STATS & LIVE DAILY PLAYTIME HUD */}
       <div className="flex items-center justify-between px-3 py-2 bg-black/60 border-b border-white/10 backdrop-blur-md z-30 flex-wrap gap-2">
-        {/* Left: Topic Selector */}
-        <div className="flex items-center gap-2">
+        {/* Left: Topic Selector & 100 Famous Songs Selector */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowTopicModal(true)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-left transition group shadow-md"
@@ -568,11 +581,29 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                 {category === 'mistakes' && `Bẫy Lỗi 5.0 - 8.0`}
                 {category === 'vocab-vault' && `Kho Từ Vựng Nhóm ${topicId}`}
               </span>
-              <span className="text-xs font-bold text-white truncate max-w-[160px] sm:max-w-[220px]">
+              <span className="text-xs font-bold text-white truncate max-w-[140px] sm:max-w-[200px]">
                 {knowledgeItems[0]?.topicTitle || 'Chủ Đề Đang Học'}
               </span>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-white" />
+          </button>
+
+          {/* 100 Famous Piano Songs Selector Button */}
+          <button
+            onClick={() => setShowSongModal(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 border border-pink-400/40 text-left transition group shadow-md"
+            title="Chọn bài nhạc Piano (100 bài: Rush E, Ánh Trăng Beethoven, Anime, Ghibli, Nhạc Phim, Pop)"
+          >
+            <Music className="w-4 h-4 text-pink-400 group-hover:rotate-12 transition" />
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-pink-300 uppercase tracking-wider">
+                🎵 Giai Điệu (100 Bài)
+              </span>
+              <span className="text-xs font-bold text-white truncate max-w-[120px] sm:max-w-[170px]">
+                {selectedSong.title}
+              </span>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-pink-300 group-hover:text-white" />
           </button>
 
           {/* Daily Playtime Stopwatch Live Tracker */}
@@ -1435,6 +1466,136 @@ export const PianoTilesGame: React.FC<PianoTilesGameProps> = ({
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. 100 FAMOUS PIANO SONGS SELECTOR MODAL */}
+      {showSongModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+          onClick={() => setShowSongModal(false)}
+        >
+          <div 
+            className="w-full max-w-4xl bg-slate-900/95 border border-pink-500/40 rounded-2xl p-6 max-h-[85vh] flex flex-col shadow-2xl text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+              <div>
+                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                  🎵 KHO 100 BẢN NHẠC PIANO BẤT HỦ
+                </span>
+                <h3 className="text-xl font-black text-white mt-1 flex items-center gap-2">
+                  <Music className="w-5 h-5 text-pink-400" /> Chọn Bản Nhạc Đàn Yêu Thích
+                </h3>
+                <p className="text-xs text-gray-400">
+                  Giai điệu Rush E, Ánh Trăng Beethoven, Anime Ghibli, Nhạc Phim Bom Tấn & Pop Ballad Quốc Tế
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSongModal(false)}
+                className="px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold"
+              >
+                Đóng
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-3 border-b border-white/10 no-scrollbar">
+              {[
+                { id: 'all', label: 'Tất Cả (100 Bài)', color: 'bg-white/10 text-white' },
+                { id: 'meme', label: '⚡ Meme & Cực Nhanh (Rush E...)', color: 'bg-amber-500 text-black' },
+                { id: 'classical', label: '🎹 Cổ Điển (Ánh Trăng, Elise...)', color: 'bg-indigo-500 text-white' },
+                { id: 'anime', label: '🌸 Anime & Ghibli (Laputa, Spirited...)', color: 'bg-pink-500 text-white' },
+                { id: 'movie', label: '🎬 Nhạc Phim (Interstellar, Pirates...)', color: 'bg-teal-500 text-white' },
+                { id: 'pop', label: '💖 Pop & Ballad (Yiruma, JVKE...)', color: 'bg-rose-500 text-white' }
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSongCategoryFilter(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                    songCategoryFilter === cat.id 
+                      ? `${cat.color} shadow-lg font-black` 
+                      : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Search Input */}
+            <div className="mb-3">
+              <input
+                type="text"
+                placeholder="Tìm tên bài hát hoặc tác giả (Rush E, Moonlight, Beethoven, Ghibli, Yiruma, Adele...)..."
+                value={songSearchQuery}
+                onChange={(e) => setSongSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
+              />
+            </div>
+
+            {/* Song Grid */}
+            <div className="overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 flex-1">
+              {filteredSongs.map((song) => {
+                const isSelected = selectedSong.id === song.id;
+                return (
+                  <button
+                    key={song.id}
+                    onClick={() => {
+                      setSelectedSong(song);
+                      setSongNoteIndex(0);
+                      setShowSongModal(false);
+                      pianoAudio.playPianoNote(song.notes[0], 1.5, 0.9);
+                    }}
+                    className={`p-3 rounded-2xl text-left border transition flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-pink-500/20 border-pink-400 shadow-lg shadow-pink-500/20 ring-1 ring-pink-400'
+                        : 'bg-white/5 hover:bg-white/10 border-white/10'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                          {song.categoryLabel}
+                        </span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                          song.difficulty === 'Cực Hạn' ? 'bg-red-500/30 text-red-300 border-red-500/50' :
+                          song.difficulty === 'Nhanh' ? 'bg-amber-500/30 text-amber-300 border-amber-500/50' :
+                          song.difficulty === 'Vừa' ? 'bg-blue-500/30 text-blue-300 border-blue-500/50' :
+                          'bg-emerald-500/30 text-emerald-300 border-emerald-500/50'
+                        }`}>
+                          {song.difficulty}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-black text-white line-clamp-1 mb-0.5">
+                        {song.title}
+                      </h4>
+                      <p className="text-[11px] text-pink-200/80 italic line-clamp-1 mb-1">
+                        ✍️ {song.author}
+                      </p>
+                      <p className="text-[10px] text-gray-400 line-clamp-2">
+                        {song.description}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px] text-gray-400 mt-2">
+                      <span>🎹 {song.notes.length} Nốt phím</span>
+                      {isSelected ? (
+                        <span className="text-emerald-400 font-bold flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Đang chơi
+                        </span>
+                      ) : (
+                        <span className="text-pink-300 font-bold hover:underline">
+                          Chọn bài này →
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
