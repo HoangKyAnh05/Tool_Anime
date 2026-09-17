@@ -35,13 +35,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         ...({ WebkitAppRegion: 'drag' } as any),
       }}
     >
-      {/* Left: App Brand & Icon */}
+      {/* Left: App Brand & AI Icon */}
       <div className="flex items-center gap-2.5" style={{ ...({ WebkitAppRegion: 'no-drag' } as any) }}>
-        <div className="w-6 h-6 rounded-md overflow-hidden flex items-center justify-center bg-gradient-to-tr from-cyan-500 to-indigo-600 shadow-md">
-          <Sparkles className="w-3.5 h-3.5 text-white" />
-        </div>
+        <img 
+          src="/icon.png" 
+          alt="AI IELTS Piano" 
+          className="w-7 h-7 rounded-lg object-cover shadow-lg border border-cyan-400/40 animate-soft-pulse"
+        />
         <span className="font-extrabold tracking-wide text-white uppercase text-xs flex items-center gap-1.5 font-display">
-          IELTS Anime Novel <span className="text-cyan-400 font-sans text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/20 border border-cyan-500/30">8.0 Mastery</span>
+          IELTS Anime Piano <span className="text-pink-300 font-sans text-[10px] px-1.5 py-0.2 rounded bg-pink-500/20 border border-pink-500/30">AI 8.5+ Mastery</span>
         </span>
         <span className="text-gray-500">|</span>
         <span className="text-gray-400 font-medium truncate max-w-xs">
